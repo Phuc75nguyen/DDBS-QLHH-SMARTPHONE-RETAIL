@@ -70,7 +70,8 @@ def main() -> None:
     def logout() -> None:
         """Clear the logged‑in user and force a rerun."""
         st.session_state.user = None
-        st.experimental_rerun()
+        #st.experimental_rerun()
+        st.rerun()
 
     if st.session_state.user is None:
         # Show login form
@@ -84,7 +85,8 @@ def main() -> None:
                 if user_doc:
                     st.session_state.user = user_doc
                     st.success("Đăng nhập thành công!")
-                    st.experimental_rerun()
+                    #st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Sai tên đăng nhập hoặc mật khẩu")
         st.stop()
@@ -221,7 +223,8 @@ def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     nhanvien_col.insert_one(doc)
                     st.success("Thêm nhân viên mới thành công")
-                st.experimental_rerun()
+                #st.experimental_rerun()
+                st.rerun()
 
         # Delete employee section
         st.subheader("Xóa nhân viên")
@@ -231,7 +234,8 @@ def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa nhân viên")
             else:
                 st.error("Không tìm thấy nhân viên hoặc lỗi khi xóa")
-            st.experimental_rerun()
+           #st.experimental_rerun()
+            st.rerun()
 
 
 def show_warehouses(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
@@ -280,7 +284,8 @@ def show_warehouses(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     kho_col.insert_one(doc)
                     st.success("Thêm kho mới thành công")
-                st.experimental_rerun()
+                #st.experimental_rerun()
+                st.rerun()
 
         st.subheader("Xóa kho")
         makho_to_delete = st.text_input("Nhập mã kho cần xóa")
@@ -289,7 +294,8 @@ def show_warehouses(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa kho")
             else:
                 st.error("Không tìm thấy kho hoặc lỗi khi xóa")
-            st.experimental_rerun()
+            #st.experimental_rerun()
+            st.rerun()
 
 
 def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
@@ -331,7 +337,8 @@ def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     vattu_col.insert_one(doc)
                     st.success("Thêm vật tư mới thành công")
-                st.experimental_rerun()
+                #st.experimental_rerun()
+                st.rerun()
 
         st.subheader("Xóa vật tư")
         mahang_to_delete = st.text_input("Nhập mã vật tư cần xóa")
@@ -340,7 +347,8 @@ def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa vật tư")
             else:
                 st.error("Không tìm thấy vật tư hoặc lỗi khi xóa")
-            st.experimental_rerun()
+            #st.experimental_rerun()
+            st.rerun()
 
 
 def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
@@ -401,7 +409,9 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             else:
                 dathang_col.insert_one(doc)
                 st.success("Đã thêm đơn hàng")
-                st.experimental_rerun()
+                #st.experimental_rerun()
+                st.rerun()
+
 
     # TODO: implement editing and detail items (CTDDH)
     st.info(
@@ -474,7 +484,8 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     phieunhap_col.insert_one(doc)
                     st.success("Đã thêm phiếu nhập")
-                    st.experimental_rerun()
+                    #st.experimental_rerun()
+                    st.rerun()
 
         st.info(
             "Phần chi tiết phiếu nhập (CTPN) chưa được triển khai trong phiên bản "
@@ -523,7 +534,8 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     phieuxuat_col.insert_one(doc)
                     st.success("Đã thêm phiếu xuất")
-                    st.experimental_rerun()
+                    #st.experimental_rerun()
+                    st.rerun()
         st.info(
             "Phần chi tiết phiếu xuất (CTPX) chưa được triển khai trong phiên bản "
             "này."

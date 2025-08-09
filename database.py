@@ -104,7 +104,7 @@ class DatabaseManager:
             )
         return mongomock.MongoClient()
 
-    def get_collection(self, branch: str, collection_name: str) -> Collection:
+    def get_collection(self, branch: str, collection_name: str) -> Any:
         """Return the appropriate collection for a given branch.
 
         Transactional collections (such as orders and receipts) reside on
@@ -176,7 +176,7 @@ class DatabaseManager:
         self.db_server3["Vattu"].create_index("MAHANG", unique=True)
         self.db_server3["users"].create_index("username", unique=True)
 
-        # Initialize empty transactional collections with primary key indexes
+        
         for col_name in [
             "DatHang",
             "CTDDH",
