@@ -356,9 +356,15 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     st.header("Đơn đặt hàng")
     role = user["role"].capitalize()
     branch = user.get("branch")
-    # Determine collection based on branch
+    # Determine collection and underlying client based on branch
     dathang_col = dbm.get_collection(branch, "DatHang") if branch else None
     ctddh_col = dbm.get_collection(branch, "CTDDH") if branch else None
+    # Select the correct MongoClient so we can start a session for writes
+    client = None
+    if branch == "CN1":
+        client = dbm.client_server1
+    elif branch == "CN2":
+        client = dbm.client_server2
 
     if role == "Congty":
         st.info("Chức năng này hiện chưa hỗ trợ cho quyền Công Ty.")
@@ -407,10 +413,37 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             if dathang_col.find_one({"MasoDDH": doc["MasoDDH"]}):
                 st.error("Mã đơn đặt hàng đã tồn tại")
             else:
-                dathang_col.insert_one(doc)
-                st.success("Đã thêm đơn hàng")
-                #st.experimental_rerun()
-                st.rerun()
+                # Perform the insert within a transaction if the backend supports it
+                if client and hasattr(client, "start_session"):
+                    session = None
+                    try:
+                        session = client.start_session()
+                        session.start_transaction()
+                        dathang_col.insert_one(doc, session=session)
+                        # Any related inserts/updates (CTDDH, inventory) would
+                        # be added here within the same transaction.
+                        session.commit_transaction()
+                        st.success("Đã thêm đơn hàng")
+                        #st.experimental_rerun()
+                        st.rerun()
+                    except Exception as e:
+                        if session:
+                            try:
+                                session.abort_transaction()
+                            except Exception:
+                                pass
+                        st.error(f"Lỗi khi thêm đơn hàng: {e}")
+                    finally:
+                        if session:
+                            session.end_session()
+                else:
+                    try:
+                        dathang_col.insert_one(doc)
+                        st.success("Đã thêm đơn hàng")
+                        #st.experimental_rerun()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi khi thêm đơn hàng: {e}")
 
 
     # TODO: implement editing and detail items (CTDDH)
@@ -428,11 +461,16 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     if role == "Congty":
         st.info("Chức năng này hiện chưa hỗ trợ cho quyền Công Ty.")
         return
-    # Determine collections
+    # Determine collections and underlying client
     phieunhap_col = dbm.get_collection(branch, "PhieuNhap")
     ctpn_col = dbm.get_collection(branch, "CTPN")
     phieuxuat_col = dbm.get_collection(branch, "PhieuXuat")
     ctpx_col = dbm.get_collection(branch, "CTPX")
+    client = None
+    if branch == "CN1":
+        client = dbm.client_server1
+    elif branch == "CN2":
+        client = dbm.client_server2
 
     # Tabs for import/export
     tab1, tab2 = st.tabs(["Phiếu nhập", "Phiếu xuất"])
@@ -482,10 +520,36 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieunhap_col.find_one({"MAPN": doc["MAPN"]}):
                     st.error("Mã phiếu nhập đã tồn tại")
                 else:
-                    phieunhap_col.insert_one(doc)
-                    st.success("Đã thêm phiếu nhập")
-                    #st.experimental_rerun()
-                    st.rerun()
+                    if client and hasattr(client, "start_session"):
+                        session = None
+                        try:
+                            session = client.start_session()
+                            session.start_transaction()
+                            phieunhap_col.insert_one(doc, session=session)
+                            # Additional updates like CTPN lines and stock
+                            # adjustments would go here within the transaction.
+                            session.commit_transaction()
+                            st.success("Đã thêm phiếu nhập")
+                            #st.experimental_rerun()
+                            st.rerun()
+                        except Exception as e:
+                            if session:
+                                try:
+                                    session.abort_transaction()
+                                except Exception:
+                                    pass
+                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
+                        finally:
+                            if session:
+                                session.end_session()
+                    else:
+                        try:
+                            phieunhap_col.insert_one(doc)
+                            st.success("Đã thêm phiếu nhập")
+                            #st.experimental_rerun()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
 
         st.info(
             "Phần chi tiết phiếu nhập (CTPN) chưa được triển khai trong phiên bản "
@@ -532,10 +596,36 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieuxuat_col.find_one({"MAPX": doc["MAPX"]}):
                     st.error("Mã phiếu xuất đã tồn tại")
                 else:
-                    phieuxuat_col.insert_one(doc)
-                    st.success("Đã thêm phiếu xuất")
-                    #st.experimental_rerun()
-                    st.rerun()
+                    if client and hasattr(client, "start_session"):
+                        session = None
+                        try:
+                            session = client.start_session()
+                            session.start_transaction()
+                            phieuxuat_col.insert_one(doc, session=session)
+                            # Related updates like CTPX lines and stock adjustments
+                            # would also execute here within the transaction.
+                            session.commit_transaction()
+                            st.success("Đã thêm phiếu xuất")
+                            #st.experimental_rerun()
+                            st.rerun()
+                        except Exception as e:
+                            if session:
+                                try:
+                                    session.abort_transaction()
+                                except Exception:
+                                    pass
+                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
+                        finally:
+                            if session:
+                                session.end_session()
+                    else:
+                        try:
+                            phieuxuat_col.insert_one(doc)
+                            st.success("Đã thêm phiếu xuất")
+                            #st.experimental_rerun()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
         st.info(
             "Phần chi tiết phiếu xuất (CTPX) chưa được triển khai trong phiên bản "
             "này."
