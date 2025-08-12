@@ -31,10 +31,8 @@ bootstrap section (e.g. username `admin`, password `admin`) to log in.
 import streamlit as st  # type: ignore
 from typing import List, Dict, Any
 
-import altair as alt
 from database import DatabaseManager
 import auth
-from reports import inventory_by_branch, revenue_by_branch
 
 
 def bootstrap_users(dbm: DatabaseManager) -> None:
@@ -358,21 +356,16 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     st.header("Đơn đặt hàng")
     role = user["role"].capitalize()
     branch = user.get("branch")
-    # Determine collection and underlying client based on branch
+    # Determine collection based on branch
     dathang_col = dbm.get_collection(branch, "DatHang") if branch else None
     ctddh_col = dbm.get_collection(branch, "CTDDH") if branch else None
-    # Select the correct MongoClient so we can start a session for writes
-    client = None
-    if branch == "CN1":
-        client = dbm.client_server1
-    elif branch == "CN2":
-        client = dbm.client_server2
 
     if role == "Congty":
         st.info("Chức năng này hiện chưa hỗ trợ cho quyền Công Ty.")
         return
     # Show list of orders for the user's branch
-    orders = list(dathang_col.find({})) if dathang_col else []
+    #orders = list(dathang_col.find({})) if dathang_col else []
+    orders = list(dathang_col.find({})) if dathang_col is not None else []
     if orders:
         df = [
             {
@@ -415,142 +408,17 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             if dathang_col.find_one({"MasoDDH": doc["MasoDDH"]}):
                 st.error("Mã đơn đặt hàng đã tồn tại")
             else:
-                # Perform the insert within a transaction if the backend supports it
-                if client and hasattr(client, "start_session"):
-                    session = None
-                    try:
-                        session = client.start_session()
-                        session.start_transaction()
-                        dathang_col.insert_one(doc, session=session)
-                        # Any related inserts/updates (CTDDH, inventory) would
-                        # be added here within the same transaction.
-                        session.commit_transaction()
-                        st.success("Đã thêm đơn hàng")
-                        #st.experimental_rerun()
-                        st.rerun()
-                    except Exception as e:
-                        if session:
-                            try:
-                                session.abort_transaction()
-                            except Exception:
-                                pass
-                        st.error(f"Lỗi khi thêm đơn hàng: {e}")
-                    finally:
-                        if session:
-                            session.end_session()
-                else:
-                    try:
-                        dathang_col.insert_one(doc)
-                        st.success("Đã thêm đơn hàng")
-                        #st.experimental_rerun()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Lỗi khi thêm đơn hàng: {e}")
-
-
-    st.subheader("Chi tiết đơn hàng")
-    if orders:
-        selected_order = st.selectbox(
-            "Chọn đơn hàng để cập nhật chi tiết",
-            [o["MasoDDH"] for o in orders],
-        )
-    else:
-        selected_order = None
-
-    if selected_order:
-        order_doc = dathang_col.find_one({"MasoDDH": selected_order})
-        details = list(ctddh_col.find({"MasoDDH": selected_order}))
-        if details:
-            df = [
-                {
-                    "Mã hàng": d.get("MAHANG"),
-                    "Số lượng": d.get("SOLUONG"),
-                    "Đơn giá": d.get("DONGIA"),
-                }
-                for d in details
-            ]
-            st.dataframe(df)
-        else:
-            st.info("Đơn hàng chưa có chi tiết")
-
-        inventory_col = dbm.get_collection(branch, "Inventory")
-        vattu_col = dbm.get_collection(None, "Vattu")
-        mahang_opts = [vt["MAHANG"] for vt in vattu_col.find()]
-
-        st.markdown("**Thêm chi tiết**")
-        with st.form("ctddh_add_form"):
-            mahang = st.selectbox("Mã hàng", mahang_opts)
-            soluong = st.number_input("Số lượng", min_value=1, step=1)
-            dongia = st.number_input("Đơn giá", min_value=0.0, step=1000.0)
-            submit_ct = st.form_submit_button("Lưu chi tiết")
-            if submit_ct:
-                existing = ctddh_col.find_one({"MasoDDH": selected_order, "MAHANG": mahang})
-                if existing:
-                    st.error("Mã hàng đã tồn tại trong đơn")
-                else:
-                    inv = inventory_col.find_one({"MAKHO": order_doc["MAKHO"], "MAHANG": mahang})
-                    available = inv.get("SOLUONG", 0) if inv else 0
-                    if soluong > available:
-                        st.error(f"Tồn kho không đủ (còn {available})")
-                    else:
-                        ctddh_col.insert_one({
-                            "MasoDDH": selected_order,
-                            "MAHANG": mahang,
-                            "SOLUONG": soluong,
-                            "DONGIA": dongia,
-                        })
-                        inventory_col.update_one(
-                            {"MAKHO": order_doc["MAKHO"], "MAHANG": mahang},
-                            {"$inc": {"SOLUONG": -soluong}},
-                        )
-                        st.success("Đã thêm chi tiết")
-                        st.rerun()
-
-        if details:
-            st.markdown("**Sửa/Xóa chi tiết**")
-            edit_mahang = st.selectbox(
-                "Chọn chi tiết",
-                [d["MAHANG"] for d in details],
-                key="ctddh_edit_select",
-            )
-            edit_doc = next(d for d in details if d["MAHANG"] == edit_mahang)
-            with st.form("ctddh_edit_form"):
-                new_qty = st.number_input(
-                    "Số lượng", min_value=1, value=edit_doc["SOLUONG"], step=1
-                )
-                new_price = st.number_input(
-                    "Đơn giá", min_value=0.0, value=float(edit_doc.get("DONGIA", 0)), step=1000.0
-                )
-                update_btn = st.form_submit_button("Cập nhật")
-                if update_btn:
-                    diff = new_qty - edit_doc["SOLUONG"]
-                    inv = inventory_col.find_one({"MAKHO": order_doc["MAKHO"], "MAHANG": edit_mahang})
-                    available = inv.get("SOLUONG", 0) if inv else 0
-                    if diff > 0 and diff > available:
-                        st.error(f"Tồn kho không đủ (còn {available})")
-                    else:
-                        ctddh_col.update_one(
-                            {"MasoDDH": selected_order, "MAHANG": edit_mahang},
-                            {"$set": {"SOLUONG": new_qty, "DONGIA": new_price}},
-                        )
-                        if diff != 0:
-                            inventory_col.update_one(
-                                {"MAKHO": order_doc["MAKHO"], "MAHANG": edit_mahang},
-                                {"$inc": {"SOLUONG": -diff}},
-                            )
-                        st.success("Đã cập nhật")
-                        st.rerun()
-
-            if st.button("Xóa chi tiết", key="delete_ctddh"):
-                ctddh_col.delete_one({"MasoDDH": selected_order, "MAHANG": edit_mahang})
-                inventory_col.update_one(
-                    {"MAKHO": order_doc["MAKHO"], "MAHANG": edit_mahang},
-                    {"$inc": {"SOLUONG": edit_doc["SOLUONG"]}},
-                )
-                st.success("Đã xóa chi tiết")
+                dathang_col.insert_one(doc)
+                st.success("Đã thêm đơn hàng")
+                #st.experimental_rerun()
                 st.rerun()
-    else:
-        st.info("Chọn đơn hàng để quản lý chi tiết")
+
+
+    # TODO: implement editing and detail items (CTDDH)
+    st.info(
+        "Quản lý chi tiết đơn hàng (CTDDH) sẽ được triển khai trong các bước "
+        "phát triển tiếp theo."
+    )
 
 
 def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
@@ -561,16 +429,11 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     if role == "Congty":
         st.info("Chức năng này hiện chưa hỗ trợ cho quyền Công Ty.")
         return
-    # Determine collections and underlying client
+    # Determine collections
     phieunhap_col = dbm.get_collection(branch, "PhieuNhap")
     ctpn_col = dbm.get_collection(branch, "CTPN")
     phieuxuat_col = dbm.get_collection(branch, "PhieuXuat")
     ctpx_col = dbm.get_collection(branch, "CTPX")
-    client = None
-    if branch == "CN1":
-        client = dbm.client_server1
-    elif branch == "CN2":
-        client = dbm.client_server2
 
     # Tabs for import/export
     tab1, tab2 = st.tabs(["Phiếu nhập", "Phiếu xuất"])
@@ -620,125 +483,15 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieunhap_col.find_one({"MAPN": doc["MAPN"]}):
                     st.error("Mã phiếu nhập đã tồn tại")
                 else:
-                    if client and hasattr(client, "start_session"):
-                        session = None
-                        try:
-                            session = client.start_session()
-                            session.start_transaction()
-                            phieunhap_col.insert_one(doc, session=session)
-                            # Additional updates like CTPN lines and stock
-                            # adjustments would go here within the transaction.
-                            session.commit_transaction()
-                            st.success("Đã thêm phiếu nhập")
-                            #st.experimental_rerun()
-                            st.rerun()
-                        except Exception as e:
-                            if session:
-                                try:
-                                    session.abort_transaction()
-                                except Exception:
-                                    pass
-                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
-                        finally:
-                            if session:
-                                session.end_session()
-                    else:
-                        try:
-                            phieunhap_col.insert_one(doc)
-                            st.success("Đã thêm phiếu nhập")
-                            #st.experimental_rerun()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
-
-        st.subheader("Chi tiết phiếu nhập")
-        selected_pn = st.selectbox(
-            "Chọn phiếu nhập", [pn["MAPN"] for pn in pn_list] if pn_list else []
-        )
-        if selected_pn:
-            pn_doc = phieunhap_col.find_one({"MAPN": selected_pn})
-            details = list(ctpn_col.find({"MAPN": selected_pn}))
-            if details:
-                df = [
-                    {
-                        "Mã hàng": d.get("MAHANG"),
-                        "Số lượng": d.get("SOLUONG"),
-                        "Đơn giá": d.get("DONGIA"),
-                    }
-                    for d in details
-                ]
-                st.dataframe(df)
-            else:
-                st.info("Chưa có chi tiết")
-
-            inventory_col = dbm.get_collection(branch, "Inventory")
-            vattu_col = dbm.get_collection(None, "Vattu")
-            mahang_opts = [vt["MAHANG"] for vt in vattu_col.find()]
-
-            st.markdown("**Thêm chi tiết nhập**")
-            with st.form("ctpn_add_form"):
-                mahang = st.selectbox("Mã hàng", mahang_opts)
-                soluong = st.number_input("Số lượng", min_value=1, step=1)
-                dongia = st.number_input("Đơn giá", min_value=0.0, step=1000.0)
-                submit_ct = st.form_submit_button("Lưu")
-                if submit_ct:
-                    if ctpn_col.find_one({"MAPN": selected_pn, "MAHANG": mahang}):
-                        st.error("Mã hàng đã tồn tại trong phiếu")
-                    else:
-                        ctpn_col.insert_one(
-                            {
-                                "MAPN": selected_pn,
-                                "MAHANG": mahang,
-                                "SOLUONG": soluong,
-                                "DONGIA": dongia,
-                            }
-                        )
-                        inventory_col.update_one(
-                            {"MAKHO": pn_doc["MAKHO"], "MAHANG": mahang},
-                            {"$inc": {"SOLUONG": soluong}},
-                            upsert=True,
-                        )
-                        st.success("Đã thêm chi tiết")
-                        st.rerun()
-
-            if details:
-                st.markdown("**Sửa/Xóa chi tiết nhập**")
-                edit_mahang = st.selectbox(
-                    "Chọn chi tiết nhập",
-                    [d["MAHANG"] for d in details],
-                    key="ctpn_edit_select",
-                )
-                edit_doc = next(d for d in details if d["MAHANG"] == edit_mahang)
-                with st.form("ctpn_edit_form"):
-                    new_qty = st.number_input(
-                        "Số lượng", min_value=1, value=edit_doc["SOLUONG"], step=1
-                    )
-                    new_price = st.number_input(
-                        "Đơn giá", min_value=0.0, value=float(edit_doc.get("DONGIA", 0)), step=1000.0
-                    )
-                    submit_edit = st.form_submit_button("Cập nhật")
-                    if submit_edit:
-                        diff = new_qty - edit_doc["SOLUONG"]
-                        ctpn_col.update_one(
-                            {"MAPN": selected_pn, "MAHANG": edit_mahang},
-                            {"$set": {"SOLUONG": new_qty, "DONGIA": new_price}},
-                        )
-                        if diff != 0:
-                            inventory_col.update_one(
-                                {"MAKHO": pn_doc["MAKHO"], "MAHANG": edit_mahang},
-                                {"$inc": {"SOLUONG": diff}},
-                            )
-                        st.success("Đã cập nhật")
-                        st.rerun()
-
-                if st.button("Xóa chi tiết nhập", key="delete_ctpn"):
-                    ctpn_col.delete_one({"MAPN": selected_pn, "MAHANG": edit_mahang})
-                    inventory_col.update_one(
-                        {"MAKHO": pn_doc["MAKHO"], "MAHANG": edit_mahang},
-                        {"$inc": {"SOLUONG": -edit_doc["SOLUONG"]}},
-                    )
-                    st.success("Đã xóa chi tiết")
+                    phieunhap_col.insert_one(doc)
+                    st.success("Đã thêm phiếu nhập")
+                    #st.experimental_rerun()
                     st.rerun()
+
+        st.info(
+            "Phần chi tiết phiếu nhập (CTPN) chưa được triển khai trong phiên bản "
+            "này."
+        )
 
     with tab2:
         st.subheader("Phiếu xuất hàng")
@@ -780,134 +533,14 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieuxuat_col.find_one({"MAPX": doc["MAPX"]}):
                     st.error("Mã phiếu xuất đã tồn tại")
                 else:
-                    if client and hasattr(client, "start_session"):
-                        session = None
-                        try:
-                            session = client.start_session()
-                            session.start_transaction()
-                            phieuxuat_col.insert_one(doc, session=session)
-                            # Related updates like CTPX lines and stock adjustments
-                            # would also execute here within the transaction.
-                            session.commit_transaction()
-                            st.success("Đã thêm phiếu xuất")
-                            #st.experimental_rerun()
-                            st.rerun()
-                        except Exception as e:
-                            if session:
-                                try:
-                                    session.abort_transaction()
-                                except Exception:
-                                    pass
-                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
-                        finally:
-                            if session:
-                                session.end_session()
-                    else:
-                        try:
-                            phieuxuat_col.insert_one(doc)
-                            st.success("Đã thêm phiếu xuất")
-                            #st.experimental_rerun()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
-
-        st.subheader("Chi tiết phiếu xuất")
-        selected_px = st.selectbox(
-            "Chọn phiếu xuất", [px["MAPX"] for px in px_list] if px_list else []
-        )
-        if selected_px:
-            px_doc = phieuxuat_col.find_one({"MAPX": selected_px})
-            details = list(ctpx_col.find({"MAPX": selected_px}))
-            if details:
-                df = [
-                    {
-                        "Mã hàng": d.get("MAHANG"),
-                        "Số lượng": d.get("SOLUONG"),
-                        "Đơn giá": d.get("DONGIA"),
-                    }
-                    for d in details
-                ]
-                st.dataframe(df)
-            else:
-                st.info("Chưa có chi tiết")
-
-            inventory_col = dbm.get_collection(branch, "Inventory")
-            vattu_col = dbm.get_collection(None, "Vattu")
-            mahang_opts = [vt["MAHANG"] for vt in vattu_col.find()]
-
-            st.markdown("**Thêm chi tiết xuất**")
-            with st.form("ctpx_add_form"):
-                mahang = st.selectbox("Mã hàng", mahang_opts)
-                soluong = st.number_input("Số lượng", min_value=1, step=1)
-                dongia = st.number_input("Đơn giá", min_value=0.0, step=1000.0)
-                submit_ct = st.form_submit_button("Lưu")
-                if submit_ct:
-                    if ctpx_col.find_one({"MAPX": selected_px, "MAHANG": mahang}):
-                        st.error("Mã hàng đã tồn tại trong phiếu")
-                    else:
-                        inv = inventory_col.find_one({"MAKHO": px_doc["MAKHO"], "MAHANG": mahang})
-                        available = inv.get("SOLUONG", 0) if inv else 0
-                        if soluong > available:
-                            st.error(f"Tồn kho không đủ (còn {available})")
-                        else:
-                            ctpx_col.insert_one(
-                                {
-                                    "MAPX": selected_px,
-                                    "MAHANG": mahang,
-                                    "SOLUONG": soluong,
-                                    "DONGIA": dongia,
-                                }
-                            )
-                            inventory_col.update_one(
-                                {"MAKHO": px_doc["MAKHO"], "MAHANG": mahang},
-                                {"$inc": {"SOLUONG": -soluong}},
-                            )
-                            st.success("Đã thêm chi tiết")
-                            st.rerun()
-
-            if details:
-                st.markdown("**Sửa/Xóa chi tiết xuất**")
-                edit_mahang = st.selectbox(
-                    "Chọn chi tiết xuất",
-                    [d["MAHANG"] for d in details],
-                    key="ctpx_edit_select",
-                )
-                edit_doc = next(d for d in details if d["MAHANG"] == edit_mahang)
-                with st.form("ctpx_edit_form"):
-                    new_qty = st.number_input(
-                        "Số lượng", min_value=1, value=edit_doc["SOLUONG"], step=1
-                    )
-                    new_price = st.number_input(
-                        "Đơn giá", min_value=0.0, value=float(edit_doc.get("DONGIA", 0)), step=1000.0
-                    )
-                    submit_edit = st.form_submit_button("Cập nhật")
-                    if submit_edit:
-                        diff = new_qty - edit_doc["SOLUONG"]
-                        inv = inventory_col.find_one({"MAKHO": px_doc["MAKHO"], "MAHANG": edit_mahang})
-                        available = inv.get("SOLUONG", 0) if inv else 0
-                        if diff > 0 and diff > available:
-                            st.error(f"Tồn kho không đủ (còn {available})")
-                        else:
-                            ctpx_col.update_one(
-                                {"MAPX": selected_px, "MAHANG": edit_mahang},
-                                {"$set": {"SOLUONG": new_qty, "DONGIA": new_price}},
-                            )
-                            if diff != 0:
-                                inventory_col.update_one(
-                                    {"MAKHO": px_doc["MAKHO"], "MAHANG": edit_mahang},
-                                    {"$inc": {"SOLUONG": -diff}},
-                                )
-                            st.success("Đã cập nhật")
-                            st.rerun()
-
-                if st.button("Xóa chi tiết xuất", key="delete_ctpx"):
-                    ctpx_col.delete_one({"MAPX": selected_px, "MAHANG": edit_mahang})
-                    inventory_col.update_one(
-                        {"MAKHO": px_doc["MAKHO"], "MAHANG": edit_mahang},
-                        {"$inc": {"SOLUONG": edit_doc["SOLUONG"]}},
-                    )
-                    st.success("Đã xóa chi tiết")
+                    phieuxuat_col.insert_one(doc)
+                    st.success("Đã thêm phiếu xuất")
+                    #st.experimental_rerun()
                     st.rerun()
+        st.info(
+            "Phần chi tiết phiếu xuất (CTPX) chưa được triển khai trong phiên bản "
+            "này."
+        )
 
 
 def show_create_account(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
@@ -945,29 +578,13 @@ def show_create_account(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
 
 
 def show_reports(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
-    """Display revenue and inventory charts for CongTy users."""
+    """Placeholder for reports accessible to CongTy."""
     st.header("Báo cáo")
-    role = user["role"].capitalize()
-    if role != "Congty":
-        st.warning("Chức năng này chỉ dành cho quyền Công Ty.")
-        return
-
-    revenue_df = revenue_by_branch(dbm)
-    inventory_df = inventory_by_branch(dbm)
-
-    st.subheader("Doanh thu theo chi nhánh")
-    if not revenue_df.empty:
-        chart_rev = alt.Chart(revenue_df).mark_bar().encode(x="branch", y="revenue")
-        st.altair_chart(chart_rev, use_container_width=True)
-    else:
-        st.info("Chưa có dữ liệu doanh thu")
-
-    st.subheader("Tồn kho theo chi nhánh")
-    if not inventory_df.empty:
-        chart_inv = alt.Chart(inventory_df).mark_bar().encode(x="branch", y="inventory")
-        st.altair_chart(chart_inv, use_container_width=True)
-    else:
-        st.info("Chưa có dữ liệu tồn kho")
+    st.info(
+        "Chức năng báo cáo có thể bao gồm tổng hợp doanh thu, tồn kho, "
+        "số lượng đơn hàng theo chi nhánh… Bạn có thể sử dụng Pandas và các "
+        "biểu đồ trong Streamlit để xây dựng trang báo cáo trong tương lai."
+    )
 
 
 if __name__ == "__main__":
