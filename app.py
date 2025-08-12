@@ -31,8 +31,10 @@ bootstrap section (e.g. username `admin`, password `admin`) to log in.
 import streamlit as st  # type: ignore
 from typing import List, Dict, Any
 
+import altair as alt
 from database import DatabaseManager
 import auth
+from reports import inventory_by_branch, revenue_by_branch
 
 
 def bootstrap_users(dbm: DatabaseManager) -> None:
@@ -943,13 +945,29 @@ def show_create_account(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
 
 
 def show_reports(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
-    """Placeholder for reports accessible to CongTy."""
+    """Display revenue and inventory charts for CongTy users."""
     st.header("Báo cáo")
-    st.info(
-        "Chức năng báo cáo có thể bao gồm tổng hợp doanh thu, tồn kho, "
-        "số lượng đơn hàng theo chi nhánh… Bạn có thể sử dụng Pandas và các "
-        "biểu đồ trong Streamlit để xây dựng trang báo cáo trong tương lai."
-    )
+    role = user["role"].capitalize()
+    if role != "Congty":
+        st.warning("Chức năng này chỉ dành cho quyền Công Ty.")
+        return
+
+    revenue_df = revenue_by_branch(dbm)
+    inventory_df = inventory_by_branch(dbm)
+
+    st.subheader("Doanh thu theo chi nhánh")
+    if not revenue_df.empty:
+        chart_rev = alt.Chart(revenue_df).mark_bar().encode(x="branch", y="revenue")
+        st.altair_chart(chart_rev, use_container_width=True)
+    else:
+        st.info("Chưa có dữ liệu doanh thu")
+
+    st.subheader("Tồn kho theo chi nhánh")
+    if not inventory_df.empty:
+        chart_inv = alt.Chart(inventory_df).mark_bar().encode(x="branch", y="inventory")
+        st.altair_chart(chart_inv, use_container_width=True)
+    else:
+        st.info("Chưa có dữ liệu tồn kho")
 
 
 if __name__ == "__main__":
