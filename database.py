@@ -128,6 +128,7 @@ class DatabaseManager:
             "CTPN",
             "PhieuXuat",
             "CTPX",
+            "Inventory",
         }
         reference_collections = {
             "Nhanvien",
@@ -177,29 +178,24 @@ class DatabaseManager:
         self.db_server3["users"].create_index("username", unique=True)
 
         
-        for col_name in [
-            "DatHang",
-            "CTDDH",
-            "PhieuNhap",
-            "CTPN",
-            "PhieuXuat",
-            "CTPX",
+        # Primary documents have single-field unique indexes
+        for col_name, key in [
+            ("DatHang", "MasoDDH"),
+            ("PhieuNhap", "MAPN"),
+            ("PhieuXuat", "MAPX"),
         ]:
-            # Create on both servers
-            self.db_server1[col_name].create_index(
-                ("MasoDDH" if col_name == "DatHang" else 
-                 "MAPN" if col_name == "PhieuNhap" else 
-                 "MAPX"),
-                unique=True,
-                sparse=True,
-            )
-            self.db_server2[col_name].create_index(
-                ("MasoDDH" if col_name == "DatHang" else 
-                 "MAPN" if col_name == "PhieuNhap" else 
-                 "MAPX"),
-                unique=True,
-                sparse=True,
-            )
+            self.db_server1[col_name].create_index(key, unique=True, sparse=True)
+            self.db_server2[col_name].create_index(key, unique=True, sparse=True)
+
+        # Detail lines use compound indexes to avoid duplicates
+        for col_name, keys in [
+            ("CTDDH", [("MasoDDH", 1), ("MAHANG", 1)]),
+            ("CTPN", [("MAPN", 1), ("MAHANG", 1)]),
+            ("CTPX", [("MAPX", 1), ("MAHANG", 1)]),
+            ("Inventory", [("MAKHO", 1), ("MAHANG", 1)]),
+        ]:
+            self.db_server1[col_name].create_index(keys, unique=True)
+            self.db_server2[col_name].create_index(keys, unique=True)
 
     def seed_demo_data(self) -> None:
         """Populate the database with a small set of sample records.
@@ -258,4 +254,20 @@ class DatabaseManager:
                 {"MAHANG": "VT01", "TENHANG": "iPhone 15", "DVT": " chiếc"},
                 {"MAHANG": "VT02", "TENHANG": "Samsung S23", "DVT": " chiếc"},
                 {"MAHANG": "VT03", "TENHANG": "Oppo Reno10", "DVT": " chiếc"},
+            ])
+
+        # Initial inventory for each branch warehouse
+        inv1 = self.db_server1["Inventory"]
+        inv2 = self.db_server2["Inventory"]
+        if inv1.count_documents({}) == 0:
+            inv1.insert_many([
+                {"MAKHO": "KHO1", "MAHANG": "VT01", "SOLUONG": 100},
+                {"MAKHO": "KHO1", "MAHANG": "VT02", "SOLUONG": 100},
+                {"MAKHO": "KHO1", "MAHANG": "VT03", "SOLUONG": 100},
+            ])
+        if inv2.count_documents({}) == 0:
+            inv2.insert_many([
+                {"MAKHO": "KHO2", "MAHANG": "VT01", "SOLUONG": 100},
+                {"MAKHO": "KHO2", "MAHANG": "VT02", "SOLUONG": 100},
+                {"MAKHO": "KHO2", "MAHANG": "VT03", "SOLUONG": 100},
             ])
