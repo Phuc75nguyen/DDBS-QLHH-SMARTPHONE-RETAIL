@@ -1,5 +1,7 @@
 #Distributed database system final Project "Smartphone Retail Management"
 
+#đồ án được sự tham gia của PhucNT và DiepVNH
+
 ## Cấu hình MongoDB
 
 - Dựng/khởi động mongod hoặc Docker.
