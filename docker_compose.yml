@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  server1:
+    image: mongo:6
+    container_name: qlhh_server1
+    ports:
+      - "27017:27017"
+    volumes:
+      - server1_data:/data/db
+
+  server2:
+    image: mongo:6
+    container_name: qlhh_server2
+    ports:
+      - "27018:27017"
+    volumes:
+      - server2_data:/data/db
+
+  server3:
+    image: mongo:6
+    container_name: qlhh_server3
+    ports:
+      - "27019:27017"
+    volumes:
+      - server3_data:/data/db
+
+volumes:
+  server1_data:
+  server2_data:
+  server3_data:

@@ -38,11 +38,13 @@ import auth
 def bootstrap_users(dbm: DatabaseManager) -> None:
     """Create a handful of initial accounts for demonstration.
 
-    If the `users` collection is empty, this function inserts three users:
-    * admin – a CongTy user that can view reports and manage accounts.
-    * cn1_mgr – a ChiNhanh user for branch CN1 that can manage data for CN1.
-    * cn2_mgr – a ChiNhanh user for branch CN2 that can manage data for CN2.
-    * user1 – a User role for branch CN1 with limited rights.
+    If the ``users`` collection is empty, this helper seeds the database with
+    four initial accounts:
+
+    * ``admin`` – a ``CongTy`` user who can view reports and manage accounts.
+    * ``cn1_mgr`` – a ``ChiNhanh`` manager for branch ``CN1`` who can manage data for CN1.
+    * ``cn2_mgr`` – a ``ChiNhanh`` manager for branch ``CN2`` who can manage data for CN2.
+    * ``user1`` – a ``User`` role for branch ``CN1`` with limited rights.
 
     This helper is idempotent: it only runs when there are no existing users.
     """
@@ -70,7 +72,6 @@ def main() -> None:
     def logout() -> None:
         """Clear the logged‑in user and force a rerun."""
         st.session_state.user = None
-        #st.experimental_rerun()
         st.rerun()
 
     if st.session_state.user is None:
@@ -85,7 +86,6 @@ def main() -> None:
                 if user_doc:
                     st.session_state.user = user_doc
                     st.success("Đăng nhập thành công!")
-                    #st.experimental_rerun()
                     st.rerun()
                 else:
                     st.error("Sai tên đăng nhập hoặc mật khẩu")
@@ -223,7 +223,6 @@ def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     nhanvien_col.insert_one(doc)
                     st.success("Thêm nhân viên mới thành công")
-                #st.experimental_rerun()
                 st.rerun()
 
         # Delete employee section
@@ -234,7 +233,6 @@ def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa nhân viên")
             else:
                 st.error("Không tìm thấy nhân viên hoặc lỗi khi xóa")
-           #st.experimental_rerun()
             st.rerun()
 
 
@@ -284,7 +282,6 @@ def show_warehouses(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     kho_col.insert_one(doc)
                     st.success("Thêm kho mới thành công")
-                #st.experimental_rerun()
                 st.rerun()
 
         st.subheader("Xóa kho")
@@ -294,7 +291,6 @@ def show_warehouses(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa kho")
             else:
                 st.error("Không tìm thấy kho hoặc lỗi khi xóa")
-            #st.experimental_rerun()
             st.rerun()
 
 
@@ -337,7 +333,6 @@ def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 else:
                     vattu_col.insert_one(doc)
                     st.success("Thêm vật tư mới thành công")
-                #st.experimental_rerun()
                 st.rerun()
 
         st.subheader("Xóa vật tư")
@@ -347,7 +342,6 @@ def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.success("Đã xóa vật tư")
             else:
                 st.error("Không tìm thấy vật tư hoặc lỗi khi xóa")
-            #st.experimental_rerun()
             st.rerun()
 
 
@@ -424,7 +418,6 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                         # be added here within the same transaction.
                         session.commit_transaction()
                         st.success("Đã thêm đơn hàng")
-                        #st.experimental_rerun()
                         st.rerun()
                     except Exception as e:
                         if session:
@@ -440,7 +433,6 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                     try:
                         dathang_col.insert_one(doc)
                         st.success("Đã thêm đơn hàng")
-                        #st.experimental_rerun()
                         st.rerun()
                     except Exception as e:
                         st.error(f"Lỗi khi thêm đơn hàng: {e}")
@@ -628,7 +620,6 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                             # adjustments would go here within the transaction.
                             session.commit_transaction()
                             st.success("Đã thêm phiếu nhập")
-                            #st.experimental_rerun()
                             st.rerun()
                         except Exception as e:
                             if session:
@@ -644,7 +635,6 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                         try:
                             phieunhap_col.insert_one(doc)
                             st.success("Đã thêm phiếu nhập")
-                            #st.experimental_rerun()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Lỗi khi thêm phiếu nhập: {e}")
@@ -788,7 +778,6 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                             # would also execute here within the transaction.
                             session.commit_transaction()
                             st.success("Đã thêm phiếu xuất")
-                            #st.experimental_rerun()
                             st.rerun()
                         except Exception as e:
                             if session:
@@ -804,7 +793,6 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                         try:
                             phieuxuat_col.insert_one(doc)
                             st.success("Đã thêm phiếu xuất")
-                            #st.experimental_rerun()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Lỗi khi thêm phiếu xuất: {e}")
