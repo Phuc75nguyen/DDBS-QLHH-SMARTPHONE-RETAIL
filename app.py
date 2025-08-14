@@ -30,6 +30,7 @@ bootstrap section (e.g. username `admin`, password `admin`) to log in.
 
 import streamlit as st  # type: ignore
 from typing import List, Dict, Any
+from datetime import date  # restrict birth date range and default values
 
 from database import DatabaseManager
 import auth
@@ -158,6 +159,46 @@ def show_dashboard(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             "Bạn chỉ có quyền cập nhật dữ liệu của chi nhánh này."
         )
 
+    # Show dashboard metrics for a quick overview
+    # Compute counts for employees, warehouses, materials and transactions.
+    branch = user.get("branch")
+    st.subheader("Thống kê")
+    # Counts for shared collections
+    nhanvien_col = dbm.get_collection(None, "Nhanvien")
+    kho_col = dbm.get_collection(None, "Kho")
+    vattu_col = dbm.get_collection(None, "Vattu")
+    if role == "Congty":
+        # Company role sees aggregated counts across branches
+        total_employees = nhanvien_col.count_documents({})
+        total_warehouses = kho_col.count_documents({})
+        total_materials = vattu_col.count_documents({})
+        # Orders and receipts across both servers
+        total_orders = dbm.db_server1["DatHang"].count_documents({}) + dbm.db_server2["DatHang"].count_documents({})
+        total_receipts = dbm.db_server1["PhieuNhap"].count_documents({}) + dbm.db_server2["PhieuNhap"].count_documents({})
+        total_issues = dbm.db_server1["PhieuXuat"].count_documents({}) + dbm.db_server2["PhieuXuat"].count_documents({})
+    else:
+        # Branch or user role sees counts for their branch only
+        branch_filter = {"MACN": branch}
+        total_employees = nhanvien_col.count_documents(branch_filter)
+        total_warehouses = kho_col.count_documents(branch_filter)
+        total_materials = vattu_col.count_documents({})  # shared table
+        if branch == "CN1":
+            total_orders = dbm.db_server1["DatHang"].count_documents({})
+            total_receipts = dbm.db_server1["PhieuNhap"].count_documents({})
+            total_issues = dbm.db_server1["PhieuXuat"].count_documents({})
+        else:
+            total_orders = dbm.db_server2["DatHang"].count_documents({})
+            total_receipts = dbm.db_server2["PhieuNhap"].count_documents({})
+            total_issues = dbm.db_server2["PhieuXuat"].count_documents({})
+    # Display metrics in columns
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Nhân viên", total_employees)
+    col2.metric("Kho", total_warehouses)
+    col3.metric("Vật tư", total_materials)
+    col4.metric("Đơn đặt hàng", total_orders)
+    # Combine receipts and issues into one metric for brevity
+    col5.metric("Phiếu nhập/xuất", total_receipts + total_issues)
+
 
 def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     """Employee management page."""
@@ -195,7 +236,13 @@ def show_employees(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             ho = st.text_input("Họ")
             ten = st.text_input("Tên")
             diachi = st.text_input("Địa chỉ")
-            ngaysinh = st.date_input("Ngày sinh")
+            # Restrict birth date between 1 Jan 1965 and 31 Dec 2004
+            ngaysinh = st.date_input(
+                "Ngày sinh",
+                value=date(1990, 1, 1),
+                min_value=date(1965, 1, 1),
+                max_value=date(2004, 12, 31),
+            )
             luong = st.number_input("Lương", min_value=0.0, step=100.0)
             # Branch selection depends on role
             macn_options = ["CN1", "CN2"]
@@ -301,15 +348,31 @@ def show_materials(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
     vattu_col = dbm.get_collection(None, "Vattu")
     materials = list(vattu_col.find())
     if materials:
-        df = [
-            {
-                "MAHANG": vt.get("MAHANG"),
+        data_rows = []
+        # Compute quantity per item depending on user role
+        user_branch = user.get("branch")
+        for vt in materials:
+            mahang = vt.get("MAHANG")
+            # Calculate total quantity of this material in inventory
+            total_qty = 0
+            # If company role, sum quantities across both branches
+            if role == "Congty":
+                for b in ["CN1", "CN2"]:
+                    inventory_col = dbm.get_collection(b, "Inventory")
+                    for doc in inventory_col.find({"MAHANG": mahang}):
+                        total_qty += doc.get("SOLUONG", 0)
+            else:
+                # branch or user role: use inventory of the current branch
+                inventory_col = dbm.get_collection(user_branch, "Inventory")
+                for doc in inventory_col.find({"MAHANG": mahang}):
+                    total_qty += doc.get("SOLUONG", 0)
+            data_rows.append({
+                "MAHANG": mahang,
                 "Tên hàng": vt.get("TENHANG"),
                 "Đơn vị tính": vt.get("DVT"),
-            }
-            for vt in materials
-        ]
-        st.dataframe(df)
+                "Số lượng": total_qty,
+            })
+        st.dataframe(data_rows)
     else:
         st.info("Chưa có vật tư nào trong danh sách.")
 
@@ -901,7 +964,7 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                         {"MAKHO": px_doc["MAKHO"], "MAHANG": edit_mahang},
                         {"$inc": {"SOLUONG": edit_doc["SOLUONG"]}},
                     )
-                    st.success("Đã xóa chi tiết")
+                    st.success("Đã xóa chi tiết") 
                     st.rerun()
 
 
