@@ -1,1 +1,0 @@
-print("Phuc Lam test script running...")
