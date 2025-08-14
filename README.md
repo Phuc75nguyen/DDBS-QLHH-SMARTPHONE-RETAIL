@@ -14,6 +14,13 @@ $env:MONGODB_URI_SERVER2 = "mongodb://localhost:27018"
 
 $env:MONGODB_URI_SERVER3 = "mongodb://localhost:27019"
 
+Đối với người dùng terminal "bash", gõ lệnh sau:
+
+export MONGODB_URI_SERVER1="mongodb://localhost:27017"
+export MONGODB_URI_SERVER2="mongodb://localhost:27018"
+export MONGODB_URI_SERVER3="mongodb://localhost:27019"
+
+
 -Tiếp theo bật một terminal khác để chạy app, tùy theo pip install có thể chạy các lệnh:
 
  streamlit run app.py
