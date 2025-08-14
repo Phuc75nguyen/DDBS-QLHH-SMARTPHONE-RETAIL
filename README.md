@@ -1,14 +1,17 @@
-#### Distributed database system final Project "Smartphone Retail Management"
+# Distributed database system final Project "Smartphone Retail Management"
 
 ### Nhân sự tham gia của PhucNT, DiepVNH, PhucLam219 :vvv
 
 ### Cách chạy APP
 
 - Bật Docker Desktop trước
-- Chạy file docker_compose.yml bằng lệnh "docker compose up -d"
+- Chạy file docker_compose.yml bằng lệnh "docker compose -f docker_compose.yml up -d --build"
 - Trong terminal chỗ chạy Docker gán:
+
 $env:MONGODB_URI_SERVER1 = "mongodb://localhost:27017"
+
 $env:MONGODB_URI_SERVER2 = "mongodb://localhost:27018"
+
 $env:MONGODB_URI_SERVER3 = "mongodb://localhost:27019"
 
 -Tiếp theo bật một terminal khác để chạy app, tùy theo pip install có thể chạy các lệnh:
