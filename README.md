@@ -1,7 +1,6 @@
-#Distributed database system final Project "Smartphone Retail Management"
+#### Distributed database system final Project "Smartphone Retail Management"
 
-#đồ án được sự tham gia của PhucNT, DiepVNH, PhucLam219
-
+### Nhân sự tham gia của PhucNT, DiepVNH, PhucLam219 :vvv
 
 ### Cách chạy APP
 
@@ -14,15 +13,15 @@ $env:MONGODB_URI_SERVER3 = "mongodb://localhost:27019"
 
 -Tiếp theo bật một terminal khác để chạy app, tùy theo pip install có thể chạy các lệnh:
 
-1. streamlit run app.py
+ streamlit run app.py
 hoặc
-2. python -m streamlit run app.py
+ python -m streamlit run app.py
 Nếu app chưa chạy, thì phảm đảm bảo đã cài các gói;
-1. python -m pip install streamlit pymongo
+ python -m pip install streamlit pymongo
 
 ## Kiểm tra container đã chạy chưa
 Trong terminal PowerShell hoặc tab terminal VS Code, gõ:
-- docker ps
+ docker ps
 
 ## Cách test nhanh CRUD:
 Đăng nhập admin/admin → vào “Kho” thêm 1 kho CN1 (ví dụ KHO3).
