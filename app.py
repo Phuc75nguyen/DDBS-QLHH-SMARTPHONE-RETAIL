@@ -364,7 +364,7 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
         st.info("Chức năng này hiện chưa hỗ trợ cho quyền Công Ty.")
         return
     # Show list of orders for the user's branch
-    orders = list(dathang_col.find({})) if dathang_col else []
+    orders = list(dathang_col.find({})) if dathang_col is not None else []
     if orders:
         df = [
             {
@@ -382,7 +382,7 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
 
     # Only branch managers/users can add orders
     st.subheader("Tạo đơn đặt hàng mới")
-    with st.form("order_form"):
+    with st.form("order_form", clear_on_submit=True):
         masoddh = st.text_input("Mã đơn đặt hàng")
         ngay = st.date_input("Ngày lập đơn")
         nhacc = st.text_input("Nhà cung cấp")
@@ -408,24 +408,29 @@ def show_orders(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 st.error("Mã đơn đặt hàng đã tồn tại")
             else:
                 # Perform the insert within a transaction if the backend supports it
-                if client and hasattr(client, "start_session"):
+                if client is not None and hasattr(client, "start_session"):
                     session = None
                     try:
                         session = client.start_session()
                         session.start_transaction()
                         dathang_col.insert_one(doc, session=session)
-                        # Any related inserts/updates (CTDDH, inventory) would
-                        # be added here within the same transaction.
+                        # chỗ thêm các insert/update liên quan (nếu có) cũng dùng session
                         session.commit_transaction()
                         st.success("Đã thêm đơn hàng")
                         st.rerun()
                     except Exception as e:
-                        if session:
-                            try:
-                                session.abort_transaction()
-                            except Exception:
-                                pass
-                        st.error(f"Lỗi khi thêm đơn hàng: {e}")
+                        # Fallback nếu server không hỗ trợ transaction (code 20 / IllegalOperation)
+                        try:
+                            if session:
+                                try:
+                                    session.abort_transaction()
+                                except Exception:
+                                    pass
+                            dathang_col.insert_one(doc)  # insert thường, không transaction
+                            st.success("Đã thêm đơn hàng (không dùng transaction)")
+                            st.rerun()
+                        except Exception as inner_e:
+                            st.error(f"Lỗi khi thêm đơn hàng: {inner_e}")
                     finally:
                         if session:
                             session.end_session()
@@ -583,7 +588,7 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
             st.info("Chưa có phiếu nhập nào")
 
         st.subheader("Thêm phiếu nhập")
-        with st.form("phieunhap_form"):
+        with st.form("phieunhap_form", clear_on_submit=True):
             mapn = st.text_input("Mã phiếu nhập")
             ngay = st.date_input("Ngày nhập")
             # Must pick an existing order
@@ -610,34 +615,37 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieunhap_col.find_one({"MAPN": doc["MAPN"]}):
                     st.error("Mã phiếu nhập đã tồn tại")
                 else:
-                    if client and hasattr(client, "start_session"):
-                        session = None
-                        try:
-                            session = client.start_session()
-                            session.start_transaction()
-                            phieunhap_col.insert_one(doc, session=session)
-                            # Additional updates like CTPN lines and stock
-                            # adjustments would go here within the transaction.
-                            session.commit_transaction()
-                            st.success("Đã thêm phiếu nhập")
-                            st.rerun()
-                        except Exception as e:
-                            if session:
-                                try:
-                                    session.abort_transaction()
-                                except Exception:
-                                    pass
-                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
-                        finally:
-                            if session:
-                                session.end_session()
-                    else:
-                        try:
+                    session = None
+                    try:
+                        if client is not None and hasattr(client, "start_session"):
+                            try:
+                                session = client.start_session()
+                                session.start_transaction()
+                                phieunhap_col.insert_one(doc, session=session)
+                                # (Nếu cần) các cập nhật liên quan khác cũng dùng session
+                                session.commit_transaction()
+                                st.toast("Đã thêm phiếu nhập", icon="✅")
+                                st.rerun()
+                            except Exception:
+                                # Server không hỗ trợ transaction → chèn thường
+                                if session:
+                                    try:
+                                        session.abort_transaction()
+                                    except Exception:
+                                        pass
+                                phieunhap_col.insert_one(doc)
+                                st.toast("Đã thêm phiếu nhập (không dùng transaction)", icon="✅")
+                                st.rerun()
+                        else:
                             phieunhap_col.insert_one(doc)
-                            st.success("Đã thêm phiếu nhập")
+                            st.toast("Đã thêm phiếu nhập", icon="✅")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Lỗi khi thêm phiếu nhập: {e}")
+                    except Exception as e:
+                        st.error(f"Lỗi khi thêm phiếu nhập: {e}")
+                    finally:
+                        if session:
+                            session.end_session()
+
 
         st.subheader("Chi tiết phiếu nhập")
         selected_pn = st.selectbox(
@@ -746,7 +754,7 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
         else:
             st.info("Chưa có phiếu xuất nào")
         st.subheader("Thêm phiếu xuất")
-        with st.form("phieuxuat_form"):
+        with st.form("phieuxuat_form", clear_on_submit=True):
             mapx = st.text_input("Mã phiếu xuất")
             ngay = st.date_input("Ngày xuất")
             hotenkh = st.text_input("Họ tên khách hàng")
@@ -768,34 +776,35 @@ def show_receipts(dbm: DatabaseManager, user: Dict[str, Any]) -> None:
                 if phieuxuat_col.find_one({"MAPX": doc["MAPX"]}):
                     st.error("Mã phiếu xuất đã tồn tại")
                 else:
-                    if client and hasattr(client, "start_session"):
-                        session = None
-                        try:
-                            session = client.start_session()
-                            session.start_transaction()
-                            phieuxuat_col.insert_one(doc, session=session)
-                            # Related updates like CTPX lines and stock adjustments
-                            # would also execute here within the transaction.
-                            session.commit_transaction()
-                            st.success("Đã thêm phiếu xuất")
-                            st.rerun()
-                        except Exception as e:
-                            if session:
-                                try:
-                                    session.abort_transaction()
-                                except Exception:
-                                    pass
-                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
-                        finally:
-                            if session:
-                                session.end_session()
-                    else:
-                        try:
+                    session = None
+                    try:
+                        if client is not None and hasattr(client, "start_session"):
+                            try:
+                                session = client.start_session()
+                                session.start_transaction()
+                                phieuxuat_col.insert_one(doc, session=session)
+                                # (Nếu cần) các cập nhật liên quan khác cũng dùng session
+                                session.commit_transaction()
+                                st.toast("Đã thêm phiếu xuất", icon="✅")
+                                st.rerun()
+                            except Exception:
+                                if session:
+                                    try:
+                                        session.abort_transaction()
+                                    except Exception:
+                                        pass
+                                phieuxuat_col.insert_one(doc)
+                                st.toast("Đã thêm phiếu xuất (không dùng transaction)", icon="✅")
+                                st.rerun()
+                        else:
                             phieuxuat_col.insert_one(doc)
-                            st.success("Đã thêm phiếu xuất")
+                            st.toast("Đã thêm phiếu xuất", icon="✅")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Lỗi khi thêm phiếu xuất: {e}")
+                    except Exception as e:
+                        st.error(f"Lỗi khi thêm phiếu xuất: {e}")
+                    finally:
+                        if session:
+                            session.end_session()
 
         st.subheader("Chi tiết phiếu xuất")
         selected_px = st.selectbox(
