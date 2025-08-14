@@ -1,1 +1,1 @@
-print("hello world")
+print("Phuc Lam test script running...")
